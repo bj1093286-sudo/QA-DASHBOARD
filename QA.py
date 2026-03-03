@@ -1,11 +1,11 @@
 # ============================================================
-# CSAT 품질 대시보드 v1.0
-# save as: csat_app.py
-# run:     streamlit run csat_app.py
+# 교육품질 통합 대시보드 v5.0
+# save as: app.py
+# run:     streamlit run app.py
 # install: pip install streamlit plotly pandas numpy openpyxl
 # ============================================================
 
-import io, re
+import re, io
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -17,73 +17,57 @@ import streamlit as st
 # 0. PAGE CONFIG
 # ─────────────────────────────────────────
 st.set_page_config(
-    page_title="CSAT 품질 대시보드",
-    page_icon="⭐",
+    page_title="교육품질 통합 대시보드",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 # ─────────────────────────────────────────
-# 1. GLOBAL CSS
+# 1. CSS
 # ─────────────────────────────────────────
 st.markdown("""
 <style>
-.stApp { background: #f4f6fb; }
-
+.stApp { background:#f4f6fb; }
 .kpi-card {
-    background: #fff;
-    border-radius: 12px;
-    padding: 16px 20px;
-    box-shadow: 0 2px 10px rgba(30,40,90,.10);
-    text-align: center;
-    margin-bottom: 8px;
+    background:#fff; border-radius:12px;
+    padding:16px 18px; box-shadow:0 2px 10px rgba(30,40,90,.10);
+    text-align:center; margin-bottom:8px;
 }
-.kpi-label  { font-size:.75rem; color:#6b7a99; font-weight:700; letter-spacing:.5px; text-transform:uppercase; }
-.kpi-value  { font-size:2rem; font-weight:800; color:#1a237e; line-height:1.2; margin:4px 0; }
-.kpi-sub    { font-size:.78rem; color:#888; }
-.kpi-up     { color:#1b8a4c; font-size:.82rem; }
-.kpi-down   { color:#c0392b; font-size:.82rem; }
-.kpi-eq     { color:#888;    font-size:.82rem; }
-
-.sec-header {
-    background: linear-gradient(90deg,#1a237e,#3949ab);
+.kpi-label { font-size:.72rem; color:#6b7a99; font-weight:700;
+             letter-spacing:.5px; text-transform:uppercase; }
+.kpi-value { font-size:1.9rem; font-weight:800; color:#1a237e; line-height:1.2; margin:4px 0; }
+.kpi-sub   { font-size:.75rem; color:#888; }
+.kpi-up    { color:#1b8a4c; font-size:.8rem; }
+.kpi-down  { color:#c0392b; font-size:.8rem; }
+.kpi-eq    { color:#888;    font-size:.8rem; }
+.sec-hd {
+    background:linear-gradient(90deg,#1a237e,#3949ab);
     color:#fff; border-radius:8px;
-    padding:9px 16px; font-size:1rem;
-    font-weight:700; margin:20px 0 10px;
+    padding:8px 16px; font-size:.97rem;
+    font-weight:700; margin:18px 0 10px;
 }
-
-.alert-box {
-    background:#fff3cd; border-left:4px solid #ffc107;
-    border-radius:6px; padding:10px 14px;
-    margin:8px 0; font-size:.88rem;
-}
-.danger-box {
-    background:#fdecea; border-left:4px solid #ef5350;
-    border-radius:6px; padding:10px 14px;
-    margin:8px 0; font-size:.88rem;
-}
-.good-box {
-    background:#e8f5e9; border-left:4px solid #43a047;
-    border-radius:6px; padding:10px 14px;
-    margin:8px 0; font-size:.88rem;
-}
-
-div[data-baseweb="tab"] {
-    font-weight:600; border-radius:8px 8px 0 0; padding:8px 18px;
-}
-
-table { width:100%; border-collapse:collapse; font-size:.85rem; }
-th { background:#1a237e; color:#fff; padding:8px 10px; text-align:center; }
-td { padding:7px 10px; border-bottom:1px solid #eee; text-align:center; }
-tr:hover td { background:#f0f4ff; }
+.alert-box  { background:#fff3cd; border-left:4px solid #ffc107;
+              border-radius:6px; padding:9px 14px; margin:6px 0; font-size:.87rem; }
+.danger-box { background:#fdecea; border-left:4px solid #ef5350;
+              border-radius:6px; padding:9px 14px; margin:6px 0; font-size:.87rem; }
+.good-box   { background:#e8f5e9; border-left:4px solid #43a047;
+              border-radius:6px; padding:9px 14px; margin:6px 0; font-size:.87rem; }
+div[data-baseweb="tab"] { font-weight:700; padding:8px 20px; }
 </style>
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────
 # 2. HELPERS
 # ─────────────────────────────────────────
-COLORS = ["#1a237e","#3949ab","#42a5f5","#26c6da",
-          "#66bb6a","#ffa726","#ef5350","#ab47bc","#ec407a","#26a69a"]
+COLORS = ["#1a237e","#3949ab","#e53935","#ffa726",
+          "#42a5f5","#26c6da","#66bb6a","#ab47bc","#ec407a"]
+
+CHART_BASE = dict(
+    plot_bgcolor="#fff", paper_bgcolor="#fff",
+    font=dict(family="Malgun Gothic, Apple SD Gothic Neo, sans-serif", size=12),
+    margin=dict(t=50,b=40,l=40,r=20),
+)
 
 def to_num(s):
     return pd.to_numeric(s, errors="coerce")
@@ -93,803 +77,839 @@ def safe_mean(s):
     return float(v.mean()) if len(v) else 0.0
 
 def clean_col(c):
-    return re.sub(r"\s+", "", str(c)).strip()
+    return re.sub(r"\s+","",str(c)).strip()
 
 def kpi(label, value, sub=None, delta=None, fmt=".1f", suffix=""):
     v = f"{value:{fmt}}{suffix}" if isinstance(value,(int,float)) else str(value)
-    sub_html = f'<div class="kpi-sub">{sub}</div>' if sub else ""
-    if delta is None:   d=""
-    elif delta > 0:     d=f'<div class="kpi-up">▲ {delta:+.1f}</div>'
-    elif delta < 0:     d=f'<div class="kpi-down">▼ {delta:+.1f}</div>'
-    else:               d='<div class="kpi-eq">― 변동없음</div>'
-    return f"""<div class="kpi-card">
-      <div class="kpi-label">{label}</div>
-      <div class="kpi-value">{v}</div>
-      {sub_html}{d}
-    </div>"""
+    sh = f'<div class="kpi-sub">{sub}</div>' if sub else ""
+    if delta is None: d=""
+    elif delta>0:  d=f'<div class="kpi-up">▲ {delta:+.1f}</div>'
+    elif delta<0:  d=f'<div class="kpi-down">▼ {delta:+.1f}</div>'
+    else:          d='<div class="kpi-eq">― 변동없음</div>'
+    return f'<div class="kpi-card"><div class="kpi-label">{label}</div><div class="kpi-value">{v}</div>{sh}{d}</div>'
 
 def sec(txt):
-    st.markdown(f'<div class="sec-header">{txt}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="sec-hd">{txt}</div>', unsafe_allow_html=True)
 
-def alert(txt, kind="alert"):
-    css = {"alert":"alert-box","danger":"danger-box","good":"good-box"}.get(kind,"alert-box")
-    st.markdown(f'<div class="{css}">{txt}</div>', unsafe_allow_html=True)
+def box(txt, kind="alert"):
+    cls={"alert":"alert-box","danger":"danger-box","good":"good-box"}.get(kind,"alert-box")
+    st.markdown(f'<div class="{cls}">{txt}</div>', unsafe_allow_html=True)
 
-# ─────────────────────────────────────────
-# 3. DATA PARSER
-# ─────────────────────────────────────────
-def parse_file(file) -> pd.DataFrame:
-    name = file.name.lower()
+def wk_sort_key(w):
     try:
-        if name.endswith(".csv"):
-            for enc in ["utf-8-sig","euc-kr","cp949","utf-8"]:
-                try:
-                    df = pd.read_csv(file, encoding=enc)
-                    file.seek(0)
-                    return df
-                except Exception:
-                    file.seek(0)
-        else:
-            # 엑셀: 헤더가 병합/다중일 수 있으므로 raw로 읽고 탐지
-            raw = pd.read_excel(file, header=None, dtype=str)
-            # "회신" 또는 "상담사" 포함 행을 헤더로
-            for i, row in raw.iterrows():
-                vals = [str(v) for v in row]
-                if any("회신" in v or "상담사" in v or "채널" in v for v in vals):
-                    # 헤더 2행 병합 처리 (다음 행도 서브헤더일 수 있음)
-                    header_row = raw.iloc[i].fillna("").astype(str)
-                    # 다음 행이 서브헤더인지 확인
-                    next_row = raw.iloc[i+1].fillna("").astype(str) if i+1 < len(raw) else None
-                    if next_row is not None:
-                        # 서브헤더 병합
-                        merged = []
-                        for h, s in zip(header_row, next_row):
-                            h = h.strip()
-                            s = s.strip()
-                            if s and s not in h:
-                                merged.append(f"{h}_{s}" if h else s)
-                            else:
-                                merged.append(h)
-                        df = raw.iloc[i+2:].copy()
-                        df.columns = merged
-                    else:
-                        df = raw.iloc[i+1:].copy()
-                        df.columns = header_row.tolist()
-                    df = df.reset_index(drop=True)
-                    return df
-            # 헤더 탐지 실패 시 그냥 반환
-            df = pd.read_excel(file, dtype=str)
-            return df
-    except Exception as e:
-        st.error(f"파일 파싱 오류: {e}")
+        m=int(re.search(r"(\d+)월",str(w)).group(1))
+        n=int(re.search(r"(\d+)[주W]",str(w)).group(1))
+        return m*10+n
+    except: return 0
+
+def parse_tsv(text: str) -> pd.DataFrame:
+    """붙여넣기 텍스트(탭/공백 구분) → DataFrame"""
+    text = text.strip()
+    if not text:
+        return pd.DataFrame()
+    try:
+        sep = "\t" if "\t" in text else ","
+        df = pd.read_csv(io.StringIO(text), sep=sep, dtype=str)
+        df.columns = [clean_col(c) for c in df.columns]
+        return df.dropna(how="all")
+    except:
         return pd.DataFrame()
 
-def normalize(df: pd.DataFrame) -> pd.DataFrame:
-    """컬럼명 정제 + 핵심 컬럼 매핑"""
-    # 컬럼명 공백 제거
-    df.columns = [clean_col(c) for c in df.columns]
-    df = df.dropna(how="all").copy()
-
-    # ── 컬럼 별칭 매핑 ──────────────────────────────
-    alias = {
-        "회신월":    ["회신월","월"],
-        "회신주차":  ["회신주차","주차","week","wk"],
-        "회신일자":  ["회신일자","일자","날짜","date"],
-        "상담사":    ["상담사"],
-        "채널":      ["채널","channel"],
-        "키워드":    ["키워드","keyword"],
-        "긍부정":    ["긍정/부정","긍부정","sentiment"],
-        "유형":      ["유형","type"],
-        "총합":      ["총합","totalscore","total"],
-        "Q1":        ["Q1"],
-        "Q2":        ["Q2"],
-        "Q3":        ["Q3"],
-        "친절점수":  ["친절점수","친절"],
-        "만족점수":  ["만족점수","만족"],
-        "최종점수":  ["최종점수","finalScore","이행점수"],
-        "만족율":    ["만족율(건)","만족율","satisfactionrate"],
-        "상담KEY":   ["상담KEY","상담key","KEY","key"],
-        "문의유형":  ["문의유형","inquirytype"],
-        "귀책분류":  ["귀책분류","responsibility"],
-        "문의불만사유":["문의불만사유","불만사유","reason"],
-        "상세분석":  ["상세분석","analysis","분석"],
-        "상담사근속":["상담사근속","상담사_근속","근속","근속그룹","tenure"],
-        "피드백여부":["피드백여부","피드백_여부","feedback"],
-        "피드백결과":["피드백결과","피드백_결과","feedbackresult"],
-    }
-
-    col_map = {}
-    for std, candidates in alias.items():
-        for c in df.columns:
-            if any(clean_col(cand).lower() in c.lower() or c.lower() in clean_col(cand).lower()
-                   for cand in candidates):
-                col_map[c] = std
-                break
-
-    df = df.rename(columns=col_map)
-
-    # ── 날짜/주차 처리 ──────────────────────────────
-    if "회신일자" in df.columns:
-        df["회신일자"] = pd.to_datetime(df["회신일자"], errors="coerce")
-    if "회신주차" not in df.columns and "회신일자" in df.columns:
-        df["회신주차"] = df["회신일자"].apply(
-            lambda x: f"{x.month}월{((x.day-1)//7)+1}주" if pd.notna(x) else "미상"
-        )
-
-    # ── 숫자 변환 ──────────────────────────────────
-    for col in ["총합","Q1","Q2","Q3","친절점수","만족점수","최종점수"]:
-        if col in df.columns:
-            df[col] = to_num(df[col])
-
-    # ── 만족율 처리 ─────────────────────────────────
-    if "만족율" in df.columns:
-        def parse_pct(v):
-            v = str(v).strip().replace("%","")
-            try: return float(v)*100 if float(v)<=1 else float(v)
-            except: return np.nan
-        df["만족율_num"] = df["만족율"].apply(parse_pct)
-    else:
-        df["만족율_num"] = np.nan
-
-    # ── 70점 미만 플래그 ────────────────────────────
-    score_col = "최종점수" if "최종점수" in df.columns else (
-        "만족점수" if "만족점수" in df.columns else None)
-    if score_col:
-        df["_score"] = df[score_col]
-        df["_below70"] = df["_score"] < 70
-    else:
-        df["_score"] = np.nan
-        df["_below70"] = False
-
-    # ── 채널 정규화 ────────────────────────────────
-    if "채널" in df.columns:
-        df["채널_구분"] = df["채널"].apply(
-            lambda x: "채팅" if "채팅" in str(x) or "chat" in str(x).lower()
-            else ("전화" if "전화" in str(x) or "call" in str(x).lower() or "IN" in str(x) else str(x))
-        )
-    else:
-        df["채널_구분"] = "전체"
-
-    return df
-
 # ─────────────────────────────────────────
-# 4. CHART HELPERS
-# ─────────────────────────────────────────
-CHART_LAYOUT = dict(
-    plot_bgcolor="#fff", paper_bgcolor="#fff",
-    font=dict(family="Malgun Gothic, Apple SD Gothic Neo, sans-serif", size=12),
-    margin=dict(t=50, b=40, l=40, r=20),
-)
-
-def fig_weekly_line(df, score_col, group_col, title, target=70):
-    """주차별 그룹 라인차트"""
-    if score_col not in df.columns or group_col not in df.columns:
-        return None
-    wk_col = "회신주차" if "회신주차" in df.columns else None
-    if not wk_col:
-        return None
-    g = df.groupby([wk_col, group_col])[score_col].mean().reset_index()
-    g.columns = ["주차", group_col, "평균점수"]
-
-    # 주차 정렬
-    def wk_sort(w):
-        try:
-            m = int(re.search(r"(\d+)월", str(w)).group(1))
-            n = int(re.search(r"(\d+)주", str(w)).group(1))
-            return m*10+n
-        except: return 0
-    wk_order = sorted(g["주차"].unique(), key=wk_sort)
-    g["주차"] = pd.Categorical(g["주차"], categories=wk_order, ordered=True)
-    g = g.sort_values("주차")
-
-    fig = px.line(g, x="주차", y="평균점수", color=group_col,
-                  markers=True, title=title,
-                  color_discrete_sequence=COLORS)
-    fig.add_hline(y=target, line_dash="dot", line_color="#ef5350",
-                  annotation_text=f"기준 {target}점",
-                  annotation_position="bottom right")
-    fig.update_layout(**CHART_LAYOUT, height=360,
-                      yaxis=dict(range=[0,105]),
-                      legend=dict(orientation="h", y=1.1))
-    return fig
-
-def fig_bar_agent(df, score_col, title, threshold=70, orient="h"):
-    """상담사별 평균점수 바"""
-    if score_col not in df.columns or "상담사" not in df.columns:
-        return None
-    ag = df.groupby("상담사")[score_col].agg(["mean","count"]).reset_index()
-    ag.columns = ["상담사","평균점수","건수"]
-    ag["평균점수"] = ag["평균점수"].round(1)
-    ag = ag.sort_values("평균점수", ascending=(orient=="h"))
-
-    colors = ["#ef5350" if v < threshold else "#3949ab" for v in ag["평균점수"]]
-
-    if orient == "h":
-        fig = go.Figure(go.Bar(
-            x=ag["평균점수"], y=ag["상담사"],
-            orientation="h", marker_color=colors,
-            text=ag["평균점수"], textposition="outside",
-            customdata=ag["건수"],
-            hovertemplate="%{y}<br>평균: %{x:.1f}점<br>건수: %{customdata}건<extra></extra>",
-        ))
-        fig.add_vline(x=threshold, line_dash="dot", line_color="#ef5350",
-                      annotation_text=f"기준 {threshold}점")
-        fig.update_layout(**CHART_LAYOUT,
-                          title=title,
-                          height=max(300, len(ag)*36),
-                          xaxis=dict(range=[0,110]))
-    else:
-        fig = go.Figure(go.Bar(
-            x=ag["상담사"], y=ag["평균점수"],
-            marker_color=colors,
-            text=ag["평균점수"], textposition="outside",
-            customdata=ag["건수"],
-            hovertemplate="%{x}<br>평균: %{y:.1f}점<br>건수: %{customdata}건<extra></extra>",
-        ))
-        fig.add_hline(y=threshold, line_dash="dot", line_color="#ef5350",
-                      annotation_text=f"기준 {threshold}점")
-        fig.update_layout(**CHART_LAYOUT,
-                          title=title,
-                          height=380,
-                          yaxis=dict(range=[0,110]))
-    return fig
-
-def fig_channel_bar(df, score_col, title):
-    """채널별 평균점수"""
-    if score_col not in df.columns:
-        return None
-    ch = df.groupby("채널_구분")[score_col].agg(["mean","count"]).reset_index()
-    ch.columns = ["채널","평균점수","건수"]
-    ch["평균점수"] = ch["평균점수"].round(1)
-
-    fig = px.bar(ch, x="채널", y="평균점수",
-                 color="채널", text="평균점수",
-                 color_discrete_sequence=COLORS,
-                 title=title)
-    fig.update_traces(texttemplate="%{text:.1f}점", textposition="outside")
-    fig.update_layout(**CHART_LAYOUT, height=320,
-                      yaxis=dict(range=[0,110]), showlegend=False)
-    return fig
-
-def fig_sentiment_pie(df, title="긍정/부정 비율"):
-    """긍부정 파이차트"""
-    if "긍부정" not in df.columns:
-        return None
-    vc = df["긍부정"].value_counts().reset_index()
-    vc.columns = ["구분","건수"]
-    color_map = {"긍정":"#43a047","부정":"#ef5350","중립":"#ffa726"}
-    fig = px.pie(vc, values="건수", names="구분",
-                 title=title,
-                 color="구분",
-                 color_discrete_map=color_map,
-                 hole=0.4)
-    fig.update_traces(textinfo="percent+label",
-                      textfont_size=13)
-    fig.update_layout(**CHART_LAYOUT, height=320)
-    return fig
-
-def fig_reason_bar(df, col, title, top_n=10):
-    """불만사유 / 유형 빈도"""
-    if col not in df.columns:
-        return None
-    vc = df[col].value_counts().head(top_n).reset_index()
-    vc.columns = ["항목","건수"]
-    fig = px.bar(vc, x="건수", y="항목",
-                 orientation="h",
-                 color="건수",
-                 color_continuous_scale="Blues",
-                 title=title,
-                 text="건수")
-    fig.update_traces(textposition="outside")
-    fig.update_layout(**CHART_LAYOUT,
-                      height=max(280, len(vc)*34),
-                      showlegend=False,
-                      coloraxis_showscale=False)
-    return fig
-
-def fig_score_hist(df, score_col, title, threshold=70):
-    """점수 분포 히스토그램"""
-    if score_col not in df.columns:
-        return None
-    scores = to_num(df[score_col]).dropna()
-    fig = go.Figure()
-    fig.add_trace(go.Histogram(
-        x=scores, nbinsx=20,
-        marker_color="#3949ab",
-        name="점수분포",
-        opacity=0.85,
-    ))
-    fig.add_vline(x=threshold, line_dash="dot", line_color="#ef5350",
-                  annotation_text=f"기준 {threshold}점")
-    fig.update_layout(**CHART_LAYOUT,
-                      title=title, height=300,
-                      xaxis_title="점수", yaxis_title="건수")
-    return fig
-
-def fig_area_heatmap(df, area_cols, group_col, title):
-    """영역별 점수 히트맵"""
-    valid = [c for c in area_cols if c in df.columns]
-    if not valid or group_col not in df.columns:
-        return None
-    heat = df.groupby(group_col)[valid].mean().round(1)
-    fig = go.Figure(go.Heatmap(
-        z=heat.values,
-        x=heat.columns.tolist(),
-        y=heat.index.tolist(),
-        colorscale="Blues",
-        text=heat.values.round(1),
-        texttemplate="%{text}",
-        textfont={"size":11},
-        hoverongaps=False,
-    ))
-    fig.update_layout(**CHART_LAYOUT, title=title, height=350)
-    return fig
-
-def fig_weekly_satisfaction(df, title):
-    """주차별 만족율(%) 라인차트"""
-    if "만족율_num" not in df.columns or "회신주차" not in df.columns:
-        return None
-    g = df.groupby("회신주차")["만족율_num"].mean().reset_index()
-
-    def wk_sort(w):
-        try:
-            m = int(re.search(r"(\d+)월", str(w)).group(1))
-            n = int(re.search(r"(\d+)주", str(w)).group(1))
-            return m*10+n
-        except: return 0
-    g = g.sort_values("회신주차", key=lambda s: s.map(wk_sort))
-
-    fig = px.line(g, x="회신주차", y="만족율_num",
-                  markers=True, title=title,
-                  color_discrete_sequence=["#1a237e"])
-    fig.add_hline(y=50, line_dash="dot", line_color="#ffa726",
-                  annotation_text="50% 기준")
-    fig.update_layout(**CHART_LAYOUT, height=300,
-                      yaxis_title="만족율(%)",
-                      yaxis=dict(range=[0,110]))
-    return fig
-
-# ─────────────────────────────────────────
-# 5. SIDEBAR
+# 3. SIDEBAR
 # ─────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## ⭐ CSAT 대시보드")
+    st.markdown("## 📊 교육품질 대시보드")
     st.markdown("---")
-    report_month   = st.text_input("📅 보고 기준 월", value="2025년 12월")
-    score_threshold= st.number_input("🔴 모니터링 기준점수", value=70.0, step=1.0,
-                                      help="이 점수 미만은 모니터링 대상으로 표시됩니다.")
-    target_sat     = st.number_input("🎯 만족율 목표(%)", value=70.0, step=1.0)
+    report_ym    = st.text_input("📅 보고 기준 월", value="2026년 1월")
+    prev_ym      = st.text_input("📅 전월", value="2025년 12월")
+    qa_target    = st.number_input("🎯 QA 목표점수",   value=90.0, step=0.5)
+    test_pass    = st.number_input("📝 직무테스트 기준", value=80.0, step=1.0)
+    csat_target  = st.number_input("⭐ CSAT 목표점수",  value=92.0, step=0.5)
+    csat_monitor = st.number_input("🔴 CSAT 모니터링 기준", value=70.0, step=1.0)
     st.markdown("---")
-    st.caption("📌 지원형식: Excel(.xlsx/.xls), CSV(.csv)")
-    st.caption("컬럼: 회신월/주차/일자, 상담사, 채널, 최종점수, 귀책분류 등")
+    st.caption("데이터를 각 탭에 붙여넣기(Ctrl+V)하세요")
 
 # ─────────────────────────────────────────
-# 6. HEADER
+# 4. MAIN TITLE
 # ─────────────────────────────────────────
 st.markdown(f"""
 <div style="background:linear-gradient(90deg,#1a237e,#3949ab);
      color:#fff;border-radius:12px;padding:22px 28px;margin-bottom:20px;">
-  <h2 style="margin:0;font-size:1.6rem;">⭐ CSAT 고객만족도 품질 대시보드</h2>
-  <p style="margin:4px 0 0;opacity:.85;font-size:.93rem;">
-    {report_month} 보고 · 모니터링 기준 {score_threshold:.0f}점 미만 · 만족율 목표 {target_sat:.0f}%
+  <h2 style="margin:0;font-size:1.55rem;">📊 교육품질 통합 대시보드</h2>
+  <p style="margin:4px 0 0;opacity:.85;font-size:.92rem;">
+    {report_ym} 보고 · QA목표 {qa_target}점 · 직무기준 {test_pass}점 · CSAT목표 {csat_target}점
   </p>
 </div>
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────
-# 7. FILE UPLOAD
-# ─────────────────────────────────────────
-uploaded = st.file_uploader(
-    "📂 CSAT 원본 데이터 파일 업로드 (Excel / CSV)",
-    type=["xlsx","xls","csv"],
-    help="회신월, 회신주차, 상담사, 채널, 최종점수, 귀책분류 등 컬럼 포함 파일",
-)
-
-if uploaded is None:
-    st.info("👆 파일을 업로드하면 CSAT 분석 대시보드가 자동으로 생성됩니다.")
-
-    # 샘플 데이터 형식 안내
-    with st.expander("📋 데이터 형식 예시 보기"):
-        sample = pd.DataFrame({
-            "회신월":["12월","12월","12월"],
-            "회신주차":["49WK","49WK","50WK"],
-            "회신일자":["2025-12-01","2025-12-02","2025-12-08"],
-            "상담사":["홍길동","김철수","이영희"],
-            "채널":["전화 IN","채팅","전화 IN"],
-            "긍정/부정":["부정","긍정","부정"],
-            "유형":["상담사_소극적","상담사_능숙","IBR_시스템"],
-            "최종점수":[40,100,75],
-            "친절점수":[40,100,60],
-            "만족점수":[20,20,60],
-            "만족율(건)":["0%","100%","50%"],
-            "귀책분류":["IBR","상담사","IBR"],
-            "이행점수":[100,100,85],
-            "상담사 근속":["기존1(1년이내)","신입4(180일이내)","기존1(1년이내)"],
-            "피드백여부":["X","O","O"],
-        })
-        st.dataframe(sample, use_container_width=True, hide_index=True)
-    st.stop()
-
-# ─────────────────────────────────────────
-# 8. DATA LOAD & NORMALIZE
-# ─────────────────────────────────────────
-with st.spinner("📊 데이터 분석 중..."):
-    raw = parse_file(uploaded)
-    if raw.empty:
-        st.error("❌ 데이터를 읽지 못했습니다. 파일 형식을 확인해주세요.")
-        st.stop()
-    df = normalize(raw)
-
-st.success(f"✅ {len(df):,}건 로드 완료  |  컬럼 수: {len(df.columns)}개  |  상담사: {df['상담사'].nunique() if '상담사' in df.columns else '?'}명")
-
-# 영역 컬럼 탐지 (정확성/숙련도/친절도/약속이행 세부항목)
-AREA_COLS = {
-    "정확성(30)": [c for c in df.columns if "정확한안내" in c or "프로세스" in c or "전산처리" in c],
-    "숙련도(20)": [c for c in df.columns if "맞춤설명" in c or "문의파악" in c or "숙련도" in c],
-    "친절도(30)": [c for c in df.columns if "감정연출" in c or "양해" in c or "경청" in c or "호응" in c or "언어표현" in c],
-    "약속이행(20)":[c for c in df.columns if "약속" in c or "안내누락" in c],
-}
-
-# ─────────────────────────────────────────
-# 9. TABS
+# 5. TABS
 # ─────────────────────────────────────────
 tab1, tab2, tab3, tab4 = st.tabs([
-    "📊 장표1 · 전체 현황",
-    "👤 장표2 · 상담사별 분석",
-    "🔴 장표3 · 70점 미만 모니터링",
-    "🔍 장표4 · 귀책 & 불만 분석",
+    "📞 QA (Call)",
+    "💬 QA (Chat)",
+    "📝 직무테스트",
+    "⭐ CSAT",
 ])
 
-# ══════════════════════════════════════════
-# TAB 1 : 전체 현황
-# ══════════════════════════════════════════
+# ══════════════════════════════════════════════════
+# TAB1 : QA CALL
+# ══════════════════════════════════════════════════
 with tab1:
-    sec("📊 CSAT 전체 현황 요약")
+    st.markdown("### 📞 정기 평가 결과 (Call)")
 
-    score_col = "최종점수" if "최종점수" in df.columns else "_score"
-    scores = to_num(df[score_col]).dropna()
+    with st.expander("📋 데이터 입력 방법", expanded=False):
+        st.markdown("""
+        **엑셀에서 데이터 복사 → 아래 텍스트 박스에 붙여넣기(Ctrl+V)**
+        
+        필요 컬럼: `구분(월/주차)`, `근속그룹`, `평균`, `1주차`, `2주차`, `3주차`, `인원`  
+        항목별 이행률: `구분`, `평가건수`, `첫인사`, `정보확인`, `끝인사`, `인사톤`, `통화종료`,  
+        `음성숙련도`, `전반적인감정연출`, `양해`, `즉각호응`, `언어표현`, `경청`, `문의파악`,  
+        `맞춤설명`, `정확한안내`, `프로세스`, `전산처리`, `상담이력`, `가점`, `감점`
+        """)
 
-    total_cnt   = len(df)
-    avg_score   = float(scores.mean()) if len(scores) else 0
-    below70_cnt = int((scores < score_threshold).sum())
-    below70_pct = below70_cnt / total_cnt * 100 if total_cnt else 0
-    pos_cnt     = (df["긍부정"] == "긍정").sum() if "긍부정" in df.columns else 0
-    neg_cnt     = (df["긍부정"] == "부정").sum() if "긍부정" in df.columns else 0
-    sat_avg     = float(df["만족율_num"].mean()) if "만족율_num" in df.columns else 0
+    c_left, c_right = st.columns(2)
 
-    c1,c2,c3,c4,c5 = st.columns(5)
-    c1.markdown(kpi("전체 평균점수",    avg_score,  sub=f"기준 {score_threshold:.0f}점"), unsafe_allow_html=True)
-    c2.markdown(kpi("총 응대 건수",     total_cnt,  fmt=",d", sub="건"), unsafe_allow_html=True)
-    c3.markdown(kpi(f"{score_threshold:.0f}점 미만",  below70_cnt, fmt=",d", sub=f"({below70_pct:.1f}%)"), unsafe_allow_html=True)
-    c4.markdown(kpi("만족율 평균",      sat_avg,    suffix="%", sub=f"목표 {target_sat:.0f}%"), unsafe_allow_html=True)
-    c5.markdown(kpi("긍정 / 부정",      f"{pos_cnt} / {neg_cnt}", sub="건"), unsafe_allow_html=True)
+    with c_left:
+        st.markdown("**📊 근속그룹별 주차별 점수 (붙여넣기)**")
+        qa_call_score_txt = st.text_area(
+            "근속그룹별 점수 데이터",
+            height=160,
+            placeholder="근속그룹\t평균\t1주차\t2주차\t3주차\t인원\n신입3(90일이내)\t90.9\t92.7\t92.1\t87.7\t1",
+            key="qa_call_score",
+            label_visibility="collapsed",
+        )
 
-    # 경고 배너
-    if below70_pct >= 30:
-        alert(f"⚠️ {score_threshold:.0f}점 미만 비율이 <b>{below70_pct:.1f}%</b>로 높습니다. 즉각 개선 조치가 필요합니다.", "danger")
-    elif below70_pct >= 15:
-        alert(f"📌 {score_threshold:.0f}점 미만 비율이 <b>{below70_pct:.1f}%</b>입니다. 모니터링이 필요합니다.", "alert")
+    with c_right:
+        st.markdown("**📋 전월 비교 데이터 (선택)**")
+        qa_call_prev_txt = st.text_area(
+            "전월 데이터",
+            height=160,
+            placeholder="근속그룹\t전월평균\n신입3(90일이내)\t91.3",
+            key="qa_call_prev",
+            label_visibility="collapsed",
+        )
+
+    st.markdown("**📋 항목별 이행률 (붙여넣기)**")
+    qa_call_item_txt = st.text_area(
+        "항목별 이행률",
+        height=160,
+        placeholder="구분\t평가건수\t첫인사\t정보확인\t끝인사\t인사톤\t통화종료\t음성숙련도\t전반적인감정연출\t양해\t즉각호응\t언어표현\t경청\t문의파악\t맞춤설명\t정확한안내\t프로세스\t전산처리\t상담이력\t가점\t감점\n01월\t41\t97.6%\t95.1%\t97.6%\t100.0%\t100.0%\t92.7%\t90.2%\t87.8%\t95.1%\t99.0%\t82.9%\t95.1%\t100.0%\t87.8%\t90.2%\t80.5%\t100.0%\t76.8%\t0.0%\t0.0%",
+        key="qa_call_item",
+        label_visibility="collapsed",
+    )
+
+    if st.button("📊 Call QA 장표 생성", key="btn_call", type="primary"):
+        # ── 점수 데이터 파싱 ──
+        score_df = parse_tsv(qa_call_score_txt)
+        item_df  = parse_tsv(qa_call_item_txt)
+        prev_df  = parse_tsv(qa_call_prev_txt)
+
+        if score_df.empty and item_df.empty:
+            box("데이터를 붙여넣기 해주세요.", "alert")
+        else:
+            # ── KPI ──
+            sec("① KPI 요약")
+            avg_col = next((c for c in score_df.columns if "평균" in c), None)
+            인원_col = next((c for c in score_df.columns if "인원" in c), None)
+
+            if avg_col and not score_df.empty:
+                # Total 행 분리
+                total_row = score_df[score_df.iloc[:,0].str.contains("otal|합계|전체|Total", na=False, case=False)]
+                group_row = score_df[~score_df.iloc[:,0].str.contains("otal|합계|전체|Total|Gap|gap", na=False, case=False)]
+
+                curr_avg = safe_mean(score_df[avg_col]) if total_row.empty else safe_mean(total_row[avg_col])
+                total_cnt = safe_mean(score_df[인원_col]) if 인원_col else 0
+
+                prev_avg = 0.0
+                if not prev_df.empty and avg_col in prev_df.columns:
+                    prev_avg = safe_mean(prev_df[avg_col])
+                delta_v = curr_avg - prev_avg if prev_avg else None
+
+                cols_kpi = st.columns(5)
+                cols_kpi[0].markdown(kpi("당월 평균점수", curr_avg, sub=f"목표 {qa_target}점", delta=delta_v), unsafe_allow_html=True)
+                cols_kpi[1].markdown(kpi("전월 평균점수", prev_avg if prev_avg else "-", fmt=".1f"), unsafe_allow_html=True)
+                cols_kpi[2].markdown(kpi("총 평가인원", int(total_cnt) if total_cnt else len(score_df), fmt=",d", sub="명"), unsafe_allow_html=True)
+                cols_kpi[3].markdown(kpi("목표점수", qa_target, fmt=".1f"), unsafe_allow_html=True)
+                gap_v = curr_avg - qa_target
+                cols_kpi[4].markdown(kpi("목표 GAP", gap_v, fmt="+.1f"), unsafe_allow_html=True)
+
+                if curr_avg >= qa_target:
+                    box(f"✅ 목표점수 {qa_target}점 달성! 현재 <b>{curr_avg:.1f}점</b>", "good")
+                else:
+                    box(f"⚠️ 목표점수 {qa_target}점 미달성. 현재 <b>{curr_avg:.1f}점</b> (GAP {gap_v:+.1f}점)", "danger")
+
+            # ── 차트 ──
+            st.markdown("---")
+            c1, c2 = st.columns([3, 2])
+
+            with c1:
+                sec("② 근속그룹별 주차별 점수 추이")
+                if not score_df.empty:
+                    wk_cols = [c for c in score_df.columns if "주차" in c or "WK" in c.upper()]
+                    group_col = score_df.columns[0]
+
+                    # 평균 열 + 주차열 long format
+                    plot_cols = ([avg_col] if avg_col else []) + wk_cols
+                    if plot_cols:
+                        melt_df = score_df[~score_df[group_col].str.contains("Gap|gap|GAP", na=False)].copy()
+                        melt_df = melt_df[[group_col] + plot_cols].melt(
+                            id_vars=group_col, var_name="구분", value_name="점수"
+                        )
+                        melt_df["점수"] = to_num(melt_df["점수"])
+
+                        fig = px.bar(
+                            melt_df[melt_df["구분"].isin(wk_cols)] if wk_cols else melt_df,
+                            x=group_col, y="점수", color="구분",
+                            barmode="group",
+                            text="점수",
+                            color_discrete_sequence=COLORS,
+                            title=f"근속그룹별 주차별 점수 ({report_ym})",
+                        )
+                        # 평균선 오버레이
+                        if avg_col and avg_col in score_df.columns:
+                            avg_map = score_df.set_index(group_col)[avg_col].apply(to_num)
+                            fig.add_trace(go.Scatter(
+                                x=score_df[~score_df[group_col].str.contains("Gap|gap",na=False)][group_col],
+                                y=avg_map.dropna().values,
+                                mode="lines+markers+text",
+                                name="평균",
+                                line=dict(color="#ffa726", width=3),
+                                marker=dict(size=8),
+                                text=avg_map.dropna().round(1).values,
+                                textposition="top center",
+                            ))
+                        fig.add_hline(y=qa_target, line_dash="dot", line_color="#ef5350",
+                                      annotation_text=f"목표 {qa_target}점")
+                        fig.update_traces(texttemplate="%{text:.1f}", textposition="outside",
+                                          selector=dict(type="bar"))
+                        fig.update_layout(**CHART_BASE, height=380,
+                                          yaxis=dict(range=[75,105]),
+                                          legend=dict(orientation="h", y=1.08))
+                        st.plotly_chart(fig, use_container_width=True)
+
+            with c2:
+                sec("③ 근속그룹별 주차별 결과표")
+                if not score_df.empty:
+                    disp = score_df.copy()
+                    st.dataframe(disp, use_container_width=True, hide_index=True, height=300)
+
+            # ── 항목별 이행률 ──
+            sec("④ 항목별 이행률")
+            if not item_df.empty:
+                구분_col = item_df.columns[0]
+                num_cols = [c for c in item_df.columns if c not in [구분_col, "평가건수"]]
+
+                # % 문자 제거 후 숫자 변환
+                item_num = item_df.copy()
+                for c in num_cols:
+                    item_num[c] = to_num(item_num[c].astype(str).str.replace("%",""))
+
+                # 히트맵
+                gap_row   = item_num[item_num[구분_col].str.contains("Gap|gap|GAP", na=False)]
+                data_rows = item_num[~item_num[구분_col].str.contains("Gap|gap|GAP", na=False)]
+
+                if not data_rows.empty and num_cols:
+                    z_vals = data_rows[num_cols].values.tolist()
+                    fig2 = go.Figure(go.Heatmap(
+                        z=z_vals,
+                        x=num_cols,
+                        y=data_rows[구분_col].tolist(),
+                        colorscale="Blues",
+                        zmin=60, zmax=100,
+                        text=[[f"{v:.1f}%" if not pd.isna(v) else "-" for v in row] for row in z_vals],
+                        texttemplate="%{text}",
+                        textfont={"size":10},
+                    ))
+                    fig2.update_layout(**CHART_BASE, title="항목별 이행률 히트맵",
+                                       height=220,
+                                       xaxis=dict(tickangle=-30))
+                    st.plotly_chart(fig2, use_container_width=True)
+
+                # 원본 표
+                st.dataframe(item_df, use_container_width=True, hide_index=True)
+
+                # GAP 강조
+                if not gap_row.empty:
+                    sec("⑤ GAP 분석 (전월 대비)")
+                    gap_melt = gap_row.melt(id_vars=구분_col, var_name="항목", value_name="GAP")
+                    gap_melt["GAP_num"] = to_num(
+                        gap_melt["GAP"].astype(str).str.replace("%","").str.replace("p","")
+                    )
+                    gap_melt = gap_melt.dropna(subset=["GAP_num"])
+                    if not gap_melt.empty:
+                        colors_gap = ["#ef5350" if v < 0 else "#43a047" for v in gap_melt["GAP_num"]]
+                        fig3 = go.Figure(go.Bar(
+                            x=gap_melt["항목"], y=gap_melt["GAP_num"],
+                            marker_color=colors_gap,
+                            text=gap_melt["GAP"].values,
+                            textposition="outside",
+                        ))
+                        fig3.add_hline(y=0, line_color="#333", line_width=1)
+                        fig3.update_layout(**CHART_BASE, height=300,
+                                           title="전월 대비 GAP",
+                                           yaxis_title="GAP(p)")
+                        st.plotly_chart(fig3, use_container_width=True)
 
     st.markdown("---")
-    ca, cb = st.columns(2)
+    st.text_area("💬 Comment", key="call_cmt",
+                 placeholder="Call QA 특이사항을 입력하세요.")
+    st.text_area("📋 02월 목표 및 계획", key="call_plan",
+                 placeholder="목표 및 Action Plan을 입력하세요.")
 
-    with ca:
-        sec("① 주차별 평균 최종점수 추이")
-        if "회신주차" in df.columns:
-            f = fig_weekly_line(df, score_col, "채널_구분",
-                                 "주차별 채널별 평균점수", score_threshold)
-            if f: st.plotly_chart(f, use_container_width=True)
-        sec("③ 채널별 평균점수")
-        f3 = fig_channel_bar(df, score_col, "채널별 평균점수")
-        if f3: st.plotly_chart(f3, use_container_width=True)
-
-    with cb:
-        sec("② 긍정 / 부정 비율")
-        f2 = fig_sentiment_pie(df, "긍정/부정 비율")
-        if f2: st.plotly_chart(f2, use_container_width=True)
-
-        sec("④ 주차별 만족율(%)")
-        f4 = fig_weekly_satisfaction(df, "주차별 만족율 추이")
-        if f4: st.plotly_chart(f4, use_container_width=True)
-
-    sec("⑤ 주차별 상세 현황표")
-    if "회신주차" in df.columns:
-        wk_tbl = df.groupby("회신주차").agg(
-            총건수   =(score_col, "count"),
-            평균점수 =(score_col, lambda x: round(safe_mean(x),1)),
-            미만건수 =(score_col, lambda x: int((to_num(x)<score_threshold).sum())),
-            만족율평균=("만족율_num", lambda x: f"{safe_mean(x):.1f}%"),
-            긍정건수 =("긍부정",      lambda x: (x=="긍정").sum() if "긍부정" in df.columns else 0),
-            부정건수 =("긍부정",      lambda x: (x=="부정").sum() if "긍부정" in df.columns else 0),
-        ).reset_index()
-        wk_tbl.columns = ["주차","총건수","평균점수",
-                           f"{score_threshold:.0f}점미만","만족율평균","긍정","부정"]
-        st.dataframe(wk_tbl, use_container_width=True, hide_index=True)
-
-    st.text_area("💬 Comment", key="t1_cmt",
-                 placeholder="전체 CSAT 현황 특이사항을 입력하세요.")
-    st.text_area("📋 Action Plan", key="t1_plan",
-                 placeholder="전반적인 개선 계획을 입력하세요.")
-
-# ══════════════════════════════════════════
-# TAB 2 : 상담사별 분석
-# ══════════════════════════════════════════
+# ══════════════════════════════════════════════════
+# TAB2 : QA CHAT
+# ══════════════════════════════════════════════════
 with tab2:
-    sec("👤 상담사별 CSAT 분석")
+    st.markdown("### 💬 정기 평가 결과 (Chat)")
 
-    if "상담사" not in df.columns:
-        st.warning("상담사 컬럼이 없습니다.")
-    else:
-        score_col = "최종점수" if "최종점수" in df.columns else "_score"
+    with st.expander("📋 데이터 입력 방법", expanded=False):
+        st.markdown("""
+        **필요 컬럼:** `상담사`, `평균`, `1주차`, `2주차`, `3주차`  
+        **항목별 이행률:** Call과 동일 컬럼 구조
+        """)
 
-        ca2, cb2 = st.columns(2)
-        with ca2:
-            sec("① 상담사별 평균 최종점수")
-            f = fig_bar_agent(df, score_col, "상담사별 평균 최종점수",
-                               threshold=score_threshold, orient="h")
-            if f: st.plotly_chart(f, use_container_width=True)
+    c_left2, c_right2 = st.columns(2)
+    with c_left2:
+        st.markdown("**📊 상담사별 주차별 점수**")
+        qa_chat_score_txt = st.text_area(
+            "상담사별 점수",
+            height=160,
+            placeholder="상담사\t평균\t1주차\t2주차\t3주차\n문채희\t97.5\t95.0\t100.0\t-",
+            key="qa_chat_score",
+            label_visibility="collapsed",
+        )
+    with c_right2:
+        st.markdown("**📋 전월 비교 데이터 (선택)**")
+        qa_chat_prev_txt = st.text_area(
+            "전월",
+            height=160,
+            placeholder="상담사\t전월평균\n문채희\t88.8",
+            key="qa_chat_prev",
+            label_visibility="collapsed",
+        )
 
-        with cb2:
-            sec("② 주차별 상담사 점수 추이")
-            f2 = fig_weekly_line(df, score_col, "상담사",
-                                  "주차별 상담사 점수 추이", score_threshold)
-            if f2: st.plotly_chart(f2, use_container_width=True)
+    st.markdown("**📋 항목별 이행률**")
+    qa_chat_item_txt = st.text_area(
+        "항목별 이행률",
+        height=160,
+        placeholder="구분\t평가건수\t첫인사\t정보확인\t끝인사\t양해\t즉각호응\t대기\t언어표현\t가독성\t문의파악\t맞춤설명\t정확한안내\t프로세스\t전산처리\t상담이력\t가점\t감점",
+        key="qa_chat_item",
+        label_visibility="collapsed",
+    )
 
-        # ③ 영역별 히트맵
-        all_area = [c for cols in AREA_COLS.values() for c in cols]
-        if all_area:
-            sec("③ 영역별 점수 히트맵 (상담사)")
-            f3 = fig_area_heatmap(df, all_area, "상담사", "영역별 점수 히트맵")
-            if f3: st.plotly_chart(f3, use_container_width=True)
+    if st.button("📊 Chat QA 장표 생성", key="btn_chat", type="primary"):
+        score_df2 = parse_tsv(qa_chat_score_txt)
+        item_df2  = parse_tsv(qa_chat_item_txt)
+        prev_df2  = parse_tsv(qa_chat_prev_txt)
 
-        # ④ 상담사별 상세표
-        sec("④ 상담사별 상세 현황표")
-        agg_dict = {
-            "총건수":      (score_col, "count"),
-            "평균최종점수": (score_col, lambda x: round(safe_mean(x),1)),
-            "평균친절점수": ("친절점수", lambda x: round(safe_mean(x),1)) if "친절점수" in df.columns else (score_col, "count"),
-            "평균만족점수": ("만족점수", lambda x: round(safe_mean(x),1)) if "만족점수" in df.columns else (score_col, "count"),
-            f"{score_threshold:.0f}점미만": (score_col, lambda x: int((to_num(x)<score_threshold).sum())),
-            "피드백완료":   ("피드백여부", lambda x: f"{(x=='O').sum()}건") if "피드백여부" in df.columns else (score_col, "count"),
-        }
-        # 유효한 것만 필터
-        valid_agg = {}
-        for k, (col, func) in agg_dict.items():
-            if col in df.columns:
-                valid_agg[k] = (col, func)
+        if score_df2.empty and item_df2.empty:
+            box("데이터를 붙여넣기 해주세요.", "alert")
+        else:
+            avg_col2 = next((c for c in score_df2.columns if "평균" in c), None)
 
-        agent_tbl = df.groupby(["상담사근속","상담사"] if "상담사근속" in df.columns else ["상담사"]).agg(
-            **{k: v for k, v in valid_agg.items()}
-        ).reset_index()
+            # KPI
+            sec("① KPI 요약")
+            curr_avg2 = safe_mean(score_df2[avg_col2]) if avg_col2 else 0
+            prev_avg2 = 0.0
+            if not prev_df2.empty and avg_col2 in prev_df2.columns:
+                prev_avg2 = safe_mean(prev_df2[avg_col2])
+            delta2 = curr_avg2 - prev_avg2 if prev_avg2 else None
 
-        # 목표달성 여부 추가
-        avg_col = "평균최종점수"
-        if avg_col in agent_tbl.columns:
-            agent_tbl["목표달성"] = agent_tbl[avg_col].apply(
-                lambda v: "✅" if v >= score_threshold else "❌"
-            )
-        st.dataframe(agent_tbl, use_container_width=True, hide_index=True)
+            cols_k2 = st.columns(4)
+            cols_k2[0].markdown(kpi("당월 평균점수", curr_avg2, delta=delta2), unsafe_allow_html=True)
+            cols_k2[1].markdown(kpi("전월 평균점수", prev_avg2 if prev_avg2 else "-", fmt=".1f"), unsafe_allow_html=True)
+            cols_k2[2].markdown(kpi("목표점수", qa_target, fmt=".1f"), unsafe_allow_html=True)
+            cols_k2[3].markdown(kpi("GAP", curr_avg2 - qa_target, fmt="+.1f"), unsafe_allow_html=True)
 
-        # ⑤ 점수 분포
-        sec("⑤ 최종점수 분포")
-        f5 = fig_score_hist(df, score_col, "최종점수 분포", score_threshold)
-        if f5: st.plotly_chart(f5, use_container_width=True)
+            st.markdown("---")
+            c1c, c2c = st.columns([3,2])
 
-    st.text_area("💬 Comment", key="t2_cmt",
-                 placeholder="상담사별 특이사항을 입력하세요.")
-    st.text_area("📋 Action Plan", key="t2_plan",
-                 placeholder="개인별 코칭 계획을 입력하세요.")
+            with c1c:
+                sec("② 상담사별 주차별 점수 추이")
+                if not score_df2.empty:
+                    agent_col = score_df2.columns[0]
+                    wk_cols2  = [c for c in score_df2.columns if "주차" in c]
+                    plot_df2  = score_df2[~score_df2[agent_col].str.contains(
+                        "otal|합계|Gap|gap|전체",na=False,case=False)].copy()
 
-# ══════════════════════════════════════════
-# TAB 3 : 70점 미만 모니터링 ★ 핵심 장표
-# ══════════════════════════════════════════
+                    if wk_cols2:
+                        melt2 = plot_df2[[agent_col]+wk_cols2].melt(
+                            id_vars=agent_col, var_name="주차", value_name="점수")
+                        melt2["점수"] = to_num(melt2["점수"])
+                        fig4 = px.line(
+                            melt2, x="주차", y="점수", color=agent_col,
+                            markers=True, text="점수",
+                            color_discrete_sequence=COLORS,
+                            title=f"상담사별 주차별 점수 ({report_ym})",
+                        )
+                        fig4.add_hline(y=qa_target, line_dash="dot", line_color="#ef5350",
+                                       annotation_text=f"목표 {qa_target}점")
+                        fig4.update_traces(texttemplate="%{text:.1f}", textposition="top center")
+                        fig4.update_layout(**CHART_BASE, height=380,
+                                           yaxis=dict(range=[75,105]),
+                                           legend=dict(orientation="h", y=1.08))
+                        st.plotly_chart(fig4, use_container_width=True)
+
+            with c2c:
+                sec("③ 상담사별 결과표")
+                st.dataframe(score_df2, use_container_width=True, hide_index=True, height=300)
+
+            # 항목별 이행률
+            sec("④ 항목별 이행률")
+            if not item_df2.empty:
+                구분2 = item_df2.columns[0]
+                num2  = [c for c in item_df2.columns if c not in [구분2,"평가건수"]]
+                item_num2 = item_df2.copy()
+                for c in num2:
+                    item_num2[c] = to_num(item_num2[c].astype(str).str.replace("%",""))
+
+                data2 = item_num2[~item_num2[구분2].str.contains("Gap|gap|GAP",na=False)]
+                if not data2.empty and num2:
+                    z2 = data2[num2].values.tolist()
+                    fig5 = go.Figure(go.Heatmap(
+                        z=z2, x=num2, y=data2[구분2].tolist(),
+                        colorscale="Blues", zmin=60, zmax=100,
+                        text=[[f"{v:.1f}%" if not pd.isna(v) else "-" for v in row] for row in z2],
+                        texttemplate="%{text}", textfont={"size":10},
+                    ))
+                    fig5.update_layout(**CHART_BASE, title="항목별 이행률 히트맵",
+                                       height=220, xaxis=dict(tickangle=-30))
+                    st.plotly_chart(fig5, use_container_width=True)
+
+                st.dataframe(item_df2, use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+    st.text_area("💬 Comment", key="chat_cmt",
+                 placeholder="Chat QA 특이사항을 입력하세요.")
+    st.text_area("📋 02월 목표 및 계획", key="chat_plan",
+                 placeholder="목표 및 Action Plan을 입력하세요.")
+
+# ══════════════════════════════════════════════════
+# TAB3 : 직무테스트
+# ══════════════════════════════════════════════════
 with tab3:
-    sec(f"🔴 {score_threshold:.0f}점 미만 모니터링 대상")
+    st.markdown("### 📝 직무테스트 결과")
 
-    score_col = "최종점수" if "최종점수" in df.columns else "_score"
-    below_df  = df[to_num(df[score_col]) < score_threshold].copy()
+    with st.expander("📋 데이터 입력 방법", expanded=False):
+        st.markdown("""
+        **필요 컬럼:** `고유번호`, `월`, `팀`, `직무`, `상담사`, `입사일`, `근속개월`, `점수`  
+        엑셀에서 전체 데이터 복사(Ctrl+A → Ctrl+C) 후 붙여넣기
+        """)
 
-    total_cnt   = len(df)
-    below_cnt   = len(below_df)
-    below_pct   = below_cnt / total_cnt * 100 if total_cnt else 0
-    fb_done     = (below_df["피드백여부"] == "O").sum() if "피드백여부" in below_df.columns else 0
-    fb_rate     = fb_done / below_cnt * 100 if below_cnt else 0
+    test_txt = st.text_area(
+        "직무테스트 데이터 붙여넣기",
+        height=200,
+        placeholder="고유번호\t월\t팀\t직무\t상담사\t입사일\t근속개월\t점수\n...",
+        key="test_data",
+        label_visibility="collapsed",
+    )
 
-    c1,c2,c3,c4 = st.columns(4)
-    c1.markdown(kpi("전체 건수",        total_cnt, fmt=",d"), unsafe_allow_html=True)
-    c2.markdown(kpi(f"{score_threshold:.0f}점 미만 건수", below_cnt, fmt=",d",
-                    sub=f"전체의 {below_pct:.1f}%"), unsafe_allow_html=True)
-    c3.markdown(kpi("피드백 완료",      fb_done, fmt=",d",
-                    sub=f"완료율 {fb_rate:.1f}%"), unsafe_allow_html=True)
-    c4.markdown(kpi("피드백 미완료",    below_cnt-fb_done, fmt=",d"), unsafe_allow_html=True)
+    st.markdown("**📋 문항별 오답률 (선택)**")
+    wrong_txt = st.text_area(
+        "문항별 오답률",
+        height=100,
+        placeholder="문제\t1번\t2번\t3번\t4번\t5번\t6번\t7번\t8번\t9번\t10번\n유형\t취소\t취소\t분쟁조절프로세스\t...\n오답률\t10.5%\t47.4%\t78.9%\t63.2%\t...",
+        key="wrong_data",
+        label_visibility="collapsed",
+    )
 
-    if below_cnt == 0:
-        alert(f"🎉 {score_threshold:.0f}점 미만 건수가 없습니다! 훌륭합니다.", "good")
-    else:
-        if fb_rate < 70:
-            alert(f"⚠️ 피드백 완료율이 <b>{fb_rate:.1f}%</b>입니다. 미완료 건 조속 처리 필요.", "danger")
+    if st.button("📊 직무테스트 장표 생성", key="btn_test", type="primary"):
+        test_df = parse_tsv(test_txt)
 
-        st.markdown("---")
+        if test_df.empty:
+            box("데이터를 붙여넣기 해주세요.", "alert")
+        else:
+            # 컬럼 탐지
+            score_c  = next((c for c in test_df.columns if "점수" in c), None)
+            month_c  = next((c for c in test_df.columns if "월" in c), None)
+            group_c  = next((c for c in test_df.columns if "근속" in c), None)
+            agent_c  = next((c for c in test_df.columns if "상담사" in c or "이름" in c), None)
+            team_c   = next((c for c in test_df.columns if "팀" in c), None)
 
-        ca3, cb3 = st.columns(2)
-        with ca3:
-            sec("① 상담사별 70점 미만 건수")
-            if "상담사" in below_df.columns:
-                ag_below = below_df.groupby("상담사").agg(
-                    건수=(score_col,"count"),
-                    평균점수=(score_col, lambda x: round(safe_mean(x),1))
-                ).reset_index().sort_values("건수", ascending=False)
-                fig_b = px.bar(ag_below, x="상담사", y="건수",
-                               color="평균점수",
-                               color_continuous_scale="Reds_r",
-                               text="건수",
-                               title=f"상담사별 {score_threshold:.0f}점 미만 건수")
-                fig_b.update_traces(textposition="outside")
-                fig_b.update_layout(**CHART_LAYOUT, height=380,
-                                    showlegend=False)
-                st.plotly_chart(fig_b, use_container_width=True)
+            if score_c:
+                test_df[score_c] = to_num(test_df[score_c])
 
-        with cb3:
-            sec("② 주차별 70점 미만 추이")
-            if "회신주차" in below_df.columns:
-                wk_below = below_df.groupby("회신주차")[score_col].count().reset_index()
-                wk_below.columns = ["주차","건수"]
-                def wk_sort(w):
-                    try:
-                        m=int(re.search(r"(\d+)월",str(w)).group(1))
-                        n=int(re.search(r"(\d+)주",str(w)).group(1))
-                        return m*10+n
-                    except: return 0
-                wk_below = wk_below.sort_values("주차", key=lambda s:s.map(wk_sort))
-                fig_wk = px.bar(wk_below, x="주차", y="건수",
-                                color="건수",
-                                color_continuous_scale="Reds",
-                                text="건수",
-                                title="주차별 70점 미만 건수")
-                fig_wk.update_traces(textposition="outside")
-                fig_wk.update_layout(**CHART_LAYOUT, height=380,
-                                     showlegend=False)
-                st.plotly_chart(fig_wk, use_container_width=True)
+            # ── KPI ──
+            sec("① KPI 요약")
+            curr_scores = to_num(test_df[score_c]).dropna() if score_c else pd.Series()
+            curr_mean   = float(curr_scores.mean()) if len(curr_scores) else 0
+            pass_cnt    = int((curr_scores >= test_pass).sum())
+            fail_cnt    = int((curr_scores < test_pass).sum())
+            pass_rate   = pass_cnt / len(curr_scores) * 100 if len(curr_scores) else 0
+            total_n     = len(curr_scores)
 
-        # ③ 피드백 현황
-        sec("③ 피드백 현황")
-        cc3, cd3 = st.columns(2)
-        with cc3:
-            if "피드백여부" in below_df.columns:
-                fb_vc = below_df["피드백여부"].value_counts().reset_index()
-                fb_vc.columns = ["피드백여부","건수"]
-                fig_fb = px.pie(fb_vc, values="건수", names="피드백여부",
-                                color="피드백여부",
-                                color_discrete_map={"O":"#43a047","X":"#ef5350"},
-                                hole=0.4, title="피드백 완료 여부")
-                fig_fb.update_traces(textinfo="percent+label")
-                fig_fb.update_layout(**CHART_LAYOUT, height=300)
-                st.plotly_chart(fig_fb, use_container_width=True)
+            c_k = st.columns(5)
+            c_k[0].markdown(kpi("평균점수",   curr_mean, sub=f"기준 {test_pass}점"), unsafe_allow_html=True)
+            c_k[1].markdown(kpi("응시인원",   total_n,   fmt=",d", sub="명"),        unsafe_allow_html=True)
+            c_k[2].markdown(kpi("합격인원",   pass_cnt,  fmt=",d", sub="명"),        unsafe_allow_html=True)
+            c_k[3].markdown(kpi("불합격인원", fail_cnt,  fmt=",d", sub="명"),        unsafe_allow_html=True)
+            c_k[4].markdown(kpi("합격률",     pass_rate, suffix="%"),               unsafe_allow_html=True)
 
-        with cd3:
-            if "채널_구분" in below_df.columns:
-                ch_below = below_df.groupby("채널_구분")[score_col].agg(["count","mean"]).reset_index()
-                ch_below.columns = ["채널","건수","평균점수"]
-                ch_below["평균점수"] = ch_below["평균점수"].round(1)
-                fig_ch = px.bar(ch_below, x="채널", y="건수",
-                                color="채널", text="건수",
-                                color_discrete_sequence=COLORS,
-                                title="채널별 70점 미만 건수")
-                fig_ch.update_traces(textposition="outside")
-                fig_ch.update_layout(**CHART_LAYOUT, height=300,
-                                     showlegend=False)
-                st.plotly_chart(fig_ch, use_container_width=True)
+            if pass_rate < 50:
+                box(f"⚠️ 합격률이 <b>{pass_rate:.1f}%</b>로 낮습니다. 집중 보수교육이 필요합니다.", "danger")
+            elif pass_rate < 70:
+                box(f"📌 합격률 <b>{pass_rate:.1f}%</b>. 취약 인원 보강이 필요합니다.", "alert")
+            else:
+                box(f"✅ 합격률 <b>{pass_rate:.1f}%</b>.", "good")
 
-        # ④ 전체 목록
-        sec(f"④ {score_threshold:.0f}점 미만 전체 목록")
+            st.markdown("---")
 
-        show_cols = []
-        for c in ["회신주차","회신일자","상담사","상담사근속","채널_구분",
-                  score_col,"친절점수","만족점수","이행점수",
-                  "귀책분류","유형","키워드","피드백여부","피드백결과","상세분석"]:
-            if c in below_df.columns:
-                show_cols.append(c)
+            # ── 차트 ──
+            c1t, c2t = st.columns(2)
 
-        disp = below_df[show_cols].sort_values(score_col).copy()
+            with c1t:
+                sec("② 월별 평균점수 추이 (근속그룹)")
+                if month_c and group_c and score_c:
+                    trend = test_df.groupby([month_c, group_c])[score_c].mean().reset_index()
+                    trend.columns = ["월", "근속그룹", "평균점수"]
+                    trend["평균점수"] = trend["평균점수"].round(1)
 
-        # 조건부 스타일링
-        def color_score(val):
-            try:
-                v = float(val)
-                if v < 40: return "background-color:#fde8e8;color:#c0392b;font-weight:bold"
-                elif v < score_threshold: return "background-color:#fff3cd"
-                return ""
-            except: return ""
+                    fig6 = px.bar(
+                        trend, x="월", y="평균점수", color="근속그룹",
+                        barmode="group", text="평균점수",
+                        color_discrete_sequence=COLORS,
+                        title="월별 근속그룹별 평균점수",
+                    )
+                    # 전체 평균 라인
+                    overall = test_df.groupby(month_c)[score_c].mean().reset_index()
+                    overall.columns = ["월","전체평균"]
+                    fig6.add_trace(go.Scatter(
+                        x=overall["월"], y=overall["전체평균"].round(1),
+                        mode="lines+markers+text",
+                        name="전체평균",
+                        line=dict(color="#ffa726", width=3),
+                        text=overall["전체평균"].round(1),
+                        textposition="top center",
+                    ))
+                    fig6.add_hline(y=test_pass, line_dash="dot", line_color="#ef5350",
+                                   annotation_text=f"기준 {test_pass}점")
+                    fig6.update_traces(texttemplate="%{text:.1f}",
+                                       textposition="outside",
+                                       selector=dict(type="bar"))
+                    fig6.update_layout(**CHART_BASE, height=380,
+                                       yaxis=dict(range=[0,110]),
+                                       legend=dict(orientation="h", y=1.08))
+                    st.plotly_chart(fig6, use_container_width=True)
 
-        st.dataframe(
-            disp.style.applymap(color_score, subset=[score_col] if score_col in disp.columns else []),
-            use_container_width=True,
-            hide_index=True,
-            height=400,
-        )
+            with c2t:
+                sec("③ 점수대별 인원 분포")
+                if score_c:
+                    bins   = [0,40,60,80,90,100,101]
+                    labels = ["0~40","40~60","60~80","80","90","100"]
+                    test_df["점수구간"] = pd.cut(
+                        test_df[score_c], bins=bins, labels=labels,
+                        right=False, include_lowest=True
+                    )
+                    dist = test_df.groupby(["점수구간", group_c] if group_c else ["점수구간"]).size().reset_index(name="인원")
+                    if group_c:
+                        fig7 = px.bar(dist, x="점수구간", y="인원",
+                                      color=group_c, barmode="group",
+                                      text="인원",
+                                      color_discrete_sequence=COLORS,
+                                      title="점수대별 인원 분포")
+                    else:
+                        fig7 = px.bar(dist, x="점수구간", y="인원",
+                                      text="인원", color_discrete_sequence=["#3949ab"],
+                                      title="점수대별 인원 분포")
+                    fig7.add_vline(x=2.5, line_dash="dot", line_color="#ef5350",
+                                   annotation_text=f"기준 {test_pass}점")
+                    fig7.update_traces(textposition="outside")
+                    fig7.update_layout(**CHART_BASE, height=380,
+                                       legend=dict(orientation="h", y=1.08))
+                    st.plotly_chart(fig7, use_container_width=True)
 
-        # 다운로드
-        csv_bytes = disp.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
-        st.download_button(
-            label=f"📥 {score_threshold:.0f}점 미만 목록 다운로드 (CSV)",
-            data=csv_bytes,
-            file_name=f"csat_below{score_threshold:.0f}_{report_month}.csv",
-            mime="text/csv",
-        )
+            # ── 근속그룹별 현황표 ──
+            sec("④ 근속그룹별 현황표")
+            if group_c and month_c and score_c:
+                # 당월 / 전월 분리
+                months = sorted(test_df[month_c].unique())
+                curr_m = months[-1] if months else None
+                prev_m = months[-2] if len(months) >= 2 else None
 
-    st.text_area("💬 Comment", key="t3_cmt",
-                 placeholder="70점 미만 건 특이사항을 입력하세요.")
-    st.text_area("📋 Action Plan", key="t3_plan",
-                 placeholder="70점 미만 건 개선 계획을 입력하세요.")
+                def make_summary(sub_df, label):
+                    if sub_df.empty: return pd.DataFrame()
+                    s = sub_df.groupby(group_c)[score_c].agg(
+                        평균=lambda x: round(safe_mean(x),1),
+                        인원=lambda x: int(x.count()),
+                    ).reset_index()
+                    s.columns = [group_c, f"{label}_평균", f"{label}_인원"]
+                    return s
 
-# ══════════════════════════════════════════
-# TAB 4 : 귀책 & 불만 분석
-# ══════════════════════════════════════════
+                curr_s = make_summary(test_df[test_df[month_c]==curr_m], "당월") if curr_m else pd.DataFrame()
+                prev_s = make_summary(test_df[test_df[month_c]==prev_m], "전월") if prev_m else pd.DataFrame()
+
+                if not curr_s.empty and not prev_s.empty:
+                    summary = curr_s.merge(prev_s, on=group_c, how="outer")
+                    summary["평균증감"] = (
+                        to_num(summary["당월_평균"]) - to_num(summary["전월_평균"])
+                    ).round(1).apply(lambda v: f"{v:+.1f}" if not pd.isna(v) else "-")
+                    st.dataframe(summary, use_container_width=True, hide_index=True)
+                else:
+                    st.dataframe(curr_s if not curr_s.empty else test_df,
+                                 use_container_width=True, hide_index=True)
+
+            # ── 개인별 점수표 ──
+            sec("⑤ 개인별 점수 현황")
+            if score_c and agent_c:
+                cols_show = [c for c in [month_c, team_c, group_c, agent_c, "직무" if "직무" in test_df.columns else None, score_c] if c and c in test_df.columns]
+                indiv = test_df[cols_show].copy()
+                if score_c in indiv.columns:
+                    indiv["합격여부"] = indiv[score_c].apply(
+                        lambda v: "✅ 합격" if pd.notna(v) and v >= test_pass else "❌ 불합격"
+                    )
+                st.dataframe(
+                    indiv.sort_values(score_c, ascending=False),
+                    use_container_width=True, hide_index=True, height=400
+                )
+
+            # ── 문항별 오답률 ──
+            if wrong_txt.strip():
+                sec("⑥ 문항별 오답률")
+                wrong_df = parse_tsv(wrong_txt)
+                if not wrong_df.empty:
+                    # 오답률 행 탐지
+                    rate_row = wrong_df[wrong_df.iloc[:,0].str.contains("오답률|오답|rate",na=False,case=False)]
+                    type_row = wrong_df[wrong_df.iloc[:,0].str.contains("유형|type",na=False,case=False)]
+
+                    if not rate_row.empty:
+                        num_cols_w = [c for c in wrong_df.columns if c != wrong_df.columns[0]]
+                        rates = rate_row.iloc[0][num_cols_w]
+                        rates_num = to_num(rates.astype(str).str.replace("%",""))
+                        types = type_row.iloc[0][num_cols_w].values if not type_row.empty else num_cols_w
+
+                        wr_df = pd.DataFrame({
+                            "문항": num_cols_w,
+                            "유형": types,
+                            "오답률": rates_num.values,
+                        }).dropna(subset=["오답률"])
+
+                        colors_w = ["#ef5350" if v >= 50 else "#ffa726" if v >= 30 else "#3949ab"
+                                    for v in wr_df["오답률"]]
+                        fig8 = go.Figure(go.Bar(
+                            x=wr_df["문항"], y=wr_df["오답률"],
+                            marker_color=colors_w,
+                            text=wr_df["오답률"].round(1).astype(str) + "%",
+                            textposition="outside",
+                            customdata=wr_df["유형"],
+                            hovertemplate="%{x}<br>유형: %{customdata}<br>오답률: %{y:.1f}%<extra></extra>",
+                        ))
+                        fig8.add_hline(y=50, line_dash="dot", line_color="#ef5350",
+                                       annotation_text="50% 기준")
+                        fig8.update_layout(**CHART_BASE,
+                                           title="문항별 오답률",
+                                           height=350,
+                                           yaxis=dict(range=[0,110], title="오답률(%)"))
+                        st.plotly_chart(fig8, use_container_width=True)
+                        st.dataframe(wrong_df, use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+    st.text_area("💬 Comment", key="test_cmt",
+                 placeholder="직무테스트 특이사항을 입력하세요.")
+    st.text_area("📋 02월 목표 및 계획", key="test_plan",
+                 placeholder="보수교육 계획 등을 입력하세요.")
+
+# ══════════════════════════════════════════════════
+# TAB4 : CSAT
+# ══════════════════════════════════════════════════
 with tab4:
-    sec("🔍 귀책 분류 & 불만 유형 분석")
+    st.markdown("### ⭐ CSAT 결과")
 
-    score_col = "최종점수" if "최종점수" in df.columns else "_score"
+    with st.expander("📋 데이터 입력 방법", expanded=False):
+        st.markdown("""
+        **현황 데이터 컬럼:** `구분`, `전화_12월`, `전화_01월`, `채팅_12월`, `채팅_01월`, `전체_12월`, `전체_01월`, `GAP`  
+        **70점 이하 모니터링 컬럼:** `귀책사유`, `전화_12월건`, `전화_12월모니`, `전화_01월건`, `전화_01월모니`,  
+        `채팅_12월건`, `채팅_12월모니`, `채팅_01월건`, `채팅_01월모니`, `전체_12월건`, `전체_12월모니`, `전체_01월건`, `전체_01월모니`, `모니터링GAP`
+        """)
 
-    ca4, cb4 = st.columns(2)
-    with ca4:
-        sec("① 귀책 분류별 건수")
-        f = fig_reason_bar(df, "귀책분류", "귀책분류별 건수 (TOP 10)", top_n=10)
-        if f: st.plotly_chart(f, use_container_width=True)
-        else: st.info("귀책분류 컬럼 없음")
+    st.markdown("**📊 CSAT 현황 데이터**")
+    csat_main_txt = st.text_area(
+        "CSAT 현황",
+        height=140,
+        placeholder="구분\t전화_12월\t전화_01월\t채팅_12월\t채팅_01월\t전체_12월\t전체_01월\tGAP\n친절점수\t95.8\t92.8\t92.1\t90.2\t95.2\t92.5\t-2.9%▼\n만족점수\t93.8\t91.8\t86.3\t88.2\t92.6\t91.4\t-1.3%▼\n전체\t94.8\t92.3\t89.2\t89.2\t93.9\t92.0\t-2.1%▼",
+        key="csat_main",
+        label_visibility="collapsed",
+    )
 
-    with cb4:
-        sec("② 불만 유형별 건수")
-        f2 = fig_reason_bar(df, "유형", "불만 유형별 건수 (TOP 10)", top_n=10)
-        if f2: st.plotly_chart(f2, use_container_width=True)
-        else: st.info("유형 컬럼 없음")
+    st.markdown("**🔢 발송/회신 건수 데이터 (선택)**")
+    csat_count_txt = st.text_area(
+        "발송회신 건수",
+        height=100,
+        placeholder="구분\t전화_12월\t전화_01월\t채팅_12월\t채팅_01월\t전체_12월\t전체_01월\tGAP\n발송\t3583\t2877\t520\t285\t4103\t3162\t-22.9%▼\n회신\t411\t368\t76\t51\t487\t419\t-14.0%▼\n회신율\t11.5%\t12.8%\t14.6%\t17.9%\t11.9%\t13.3%\t+1.3%▲",
+        key="csat_count",
+        label_visibility="collapsed",
+    )
 
-    # ③ 귀책별 평균점수
-    sec("③ 귀책 분류별 평균 최종점수")
-    if "귀책분류" in df.columns and score_col in df.columns:
-        resp = df.groupby("귀책분류")[score_col].agg(["mean","count"]).reset_index()
-        resp.columns = ["귀책분류","평균점수","건수"]
-        resp["평균점수"] = resp["평균점수"].round(1)
-        resp = resp.sort_values("평균점수")
-        colors_r = ["#ef5350" if v < score_threshold else "#3949ab" for v in resp["평균점수"]]
-        fig3 = go.Figure(go.Bar(
-            x=resp["평균점수"], y=resp["귀책분류"],
-            orientation="h", marker_color=colors_r,
-            text=resp["평균점수"], textposition="outside",
-        ))
-        fig3.add_vline(x=score_threshold, line_dash="dot", line_color="#ef5350")
-        fig3.update_layout(**CHART_LAYOUT,
-                           height=max(300, len(resp)*38),
-                           xaxis=dict(range=[0,110]))
-        st.plotly_chart(fig3, use_container_width=True)
+    st.markdown("**🔴 70점 이하 모니터링 데이터**")
+    csat_low_txt = st.text_area(
+        "70점 이하 모니터링",
+        height=160,
+        placeholder="귀책사유\t전화_12월건\t전화_12월모니\t전화_01월건\t전화_01월모니\t채팅_12월건\t채팅_12월모니\t채팅_01월건\t채팅_01월모니\t전체_12월건\t전체_12월모니\t전체_01월건\t전체_01월모니\t모니터링GAP\nIBR\t9\t92.2\t18\t88.9\t8\t88.8\t2\t77.5\t17\t90.6\t20\t87.8\t3.1%▼\n고객\t7\t95.7\t11\t98.2\t1\t90.0\t2\t95.0\t8\t95.0\t13\t97.7\t2.8%▲\n상담사\t10\t79.0\t12\t80.4\t4\t85.0\t4\t90.0\t14\t80.7\t16\t82.8\t2.6%▲\n합계/평균\t26\t88.1\t41\t88.9\t13\t87.7\t8\t88.1\t39\t87.9\t49\t88.8\t1.0%▲",
+        key="csat_low",
+        label_visibility="collapsed",
+    )
 
-    # ④ 귀책 × 채널 크로스탭
-    sec("④ 귀책분류 × 채널 크로스탭")
-    if "귀책분류" in df.columns:
-        cross = pd.crosstab(df["귀책분류"], df["채널_구분"])
-        st.dataframe(cross, use_container_width=True)
+    if st.button("📊 CSAT 장표 생성", key="btn_csat", type="primary"):
+        main_df  = parse_tsv(csat_main_txt)
+        count_df = parse_tsv(csat_count_txt)
+        low_df   = parse_tsv(csat_low_txt)
 
-    # ⑤ 상담사별 귀책 상세표
-    sec("⑤ 상담사별 귀책 & 유형 상세")
-    if "상담사" in df.columns and "귀책분류" in df.columns:
-        detail = df.groupby(["상담사","귀책분류"]).agg(
-            건수=(score_col,"count"),
-            평균점수=(score_col, lambda x: round(safe_mean(x),1)),
-        ).reset_index().sort_values(["상담사","건수"], ascending=[True,False])
-        st.dataframe(detail, use_container_width=True, hide_index=True)
+        if main_df.empty and low_df.empty:
+            box("데이터를 붙여넣기 해주세요.", "alert")
+        else:
+            # ── KPI ──
+            sec("① CSAT KPI 요약")
+            전체행 = main_df[main_df.iloc[:,0].str.contains("전체|Total",na=False,case=False)] if not main_df.empty else pd.DataFrame()
 
-    # ⑥ 이행점수 분포
-    if "이행점수" in df.columns:
-        sec("⑥ 이행점수 분포")
-        f6 = fig_score_hist(df, "이행점수", "이행점수 분포", 80)
-        if f6: st.plotly_chart(f6, use_container_width=True)
+            # 당월/전월 컬럼 탐지
+            curr_cols = [c for c in main_df.columns if report_ym[-3:] in c or "01월" in c] if not main_df.empty else []
+            prev_cols = [c for c in main_df.columns if prev_ym[-3:]  in c or "12월" in c] if not main_df.empty else []
 
-    st.text_area("💬 Comment", key="t4_cmt",
-                 placeholder="귀책/불만 분석 특이사항을 입력하세요.")
-    st.text_area("📋 Action Plan", key="t4_plan",
-                 placeholder="귀책 개선 계획을 입력하세요.")
+            curr_val = safe_mean(to_num(전체행[curr_cols[0]])) if (not 전체행.empty and curr_cols) else 0
+            prev_val = safe_mean(to_num(전체행[prev_cols[0]])) if (not 전체행.empty and prev_cols) else 0
+            delta_c  = curr_val - prev_val if prev_val else None
+
+            # 회신율
+            회신율_row = count_df[count_df.iloc[:,0].str.contains("회신율",na=False)] if not count_df.empty else pd.DataFrame()
+            curr_rate  = 0.0
+            if not 회신율_row.empty and curr_cols:
+                rv = 회신율_row.iloc[0][curr_cols[0]] if curr_cols[0] in 회신율_row.columns else "0"
+                curr_rate = float(str(rv).replace("%","").replace("▲","").replace("▼","")) if rv else 0
+
+            # 70점 이하 건수
+            합계행 = low_df[low_df.iloc[:,0].str.contains("합계|평균|Total",na=False,case=False)] if not low_df.empty else pd.DataFrame()
+            low_curr_cols = [c for c in low_df.columns if "01월건" in c or "전체_01월건" in c] if not low_df.empty else []
+            low_cnt = int(safe_mean(to_num(합계행[low_curr_cols[0]]))) if (not 합계행.empty and low_curr_cols) else 0
+
+            c_k2 = st.columns(5)
+            c_k2[0].markdown(kpi("전체 CSAT",   curr_val,   sub=f"목표 {csat_target}점", delta=delta_c), unsafe_allow_html=True)
+            c_k2[1].markdown(kpi("전월 CSAT",   prev_val,   fmt=".1f"), unsafe_allow_html=True)
+            c_k2[2].markdown(kpi("GAP",          (curr_val-prev_val) if prev_val else 0, fmt="+.1f"), unsafe_allow_html=True)
+            c_k2[3].markdown(kpi("회신율",        curr_rate,  suffix="%"), unsafe_allow_html=True)
+            c_k2[4].markdown(kpi("70점이하 건수", low_cnt,    fmt=",d", sub="건"), unsafe_allow_html=True)
+
+            if curr_val < csat_target:
+                box(f"⚠️ CSAT <b>{curr_val:.1f}점</b>으로 목표 <b>{csat_target}점</b> 미달 (GAP {curr_val-csat_target:+.1f}점)", "danger")
+            else:
+                box(f"✅ CSAT <b>{curr_val:.1f}점</b>으로 목표 달성!", "good")
+
+            st.markdown("---")
+
+            # ── CSAT 현황표 + 차트 ──
+            c1s, c2s = st.columns([2, 3])
+
+            with c1s:
+                sec("② CSAT 현황표")
+                if not main_df.empty:
+                    st.dataframe(main_df, use_container_width=True, hide_index=True)
+                if not count_df.empty:
+                    st.markdown("**발송/회신 현황**")
+                    st.dataframe(count_df, use_container_width=True, hide_index=True)
+
+            with c2s:
+                sec("③ 전화/채팅/전체 비교 차트")
+                if not main_df.empty and curr_cols and prev_cols:
+                    구분_c = main_df.columns[0]
+                    score_rows = main_df[~main_df[구분_c].str.contains("합계|Total",na=False,case=False)].copy()
+
+                    # long format 변환
+                    plot_cols_s = [c for c in main_df.columns if "전화" in c or "채팅" in c or "전체" in c]
+                    if plot_cols_s:
+                        melt_s = score_rows[[구분_c]+plot_cols_s].melt(
+                            id_vars=구분_c, var_name="채널_월", value_name="점수")
+                        melt_s["점수"] = to_num(melt_s["점수"].astype(str).str.replace("[▲▼%]","",regex=True))
+                        melt_s = melt_s.dropna(subset=["점수"])
+
+                        fig9 = px.bar(
+                            melt_s, x="채널_월", y="점수",
+                            color=구분_c, barmode="group",
+                            text="점수",
+                            color_discrete_sequence=COLORS,
+                            title="채널별 CSAT 비교",
+                        )
+                        fig9.add_hline(y=csat_target, line_dash="dot", line_color="#ef5350",
+                                       annotation_text=f"목표 {csat_target}점")
+                        fig9.update_traces(texttemplate="%{text:.1f}", textposition="outside")
+                        fig9.update_layout(**CHART_BASE, height=380,
+                                           yaxis=dict(range=[80,100]),
+                                           xaxis=dict(tickangle=-30),
+                                           legend=dict(orientation="h", y=1.08))
+                        st.plotly_chart(fig9, use_container_width=True)
+
+            # ── 70점 이하 모니터링 ──
+            sec("④ 70점 이하 모니터링 결과")
+            if not low_df.empty:
+                st.dataframe(low_df, use_container_width=True, hide_index=True)
+
+                st.markdown("---")
+                c3s, c4s = st.columns(2)
+
+                with c3s:
+                    # 귀책별 파이차트 (당월 건수)
+                    귀책_c = low_df.columns[0]
+                    건수_cols = [c for c in low_df.columns if "01월건" in c or "건" in c]
+                    data_rows_low = low_df[~low_df[귀책_c].str.contains("합계|평균|Total",na=False,case=False)]
+
+                    if 건수_cols and not data_rows_low.empty:
+                        pie_data = data_rows_low[[귀책_c, 건수_cols[0]]].copy()
+                        pie_data.columns = ["귀책사유","건수"]
+                        pie_data["건수"] = to_num(pie_data["건수"])
+                        pie_data = pie_data.dropna()
+
+                        fig10 = px.pie(
+                            pie_data, values="건수", names="귀책사유",
+                            title=f"{report_ym} 귀책사유별 건수",
+                            color="귀책사유",
+                            color_discrete_sequence=COLORS,
+                            hole=0.4,
+                        )
+                        fig10.update_traces(textinfo="percent+label+value")
+                        fig10.update_layout(**CHART_BASE, height=350)
+                        st.plotly_chart(fig10, use_container_width=True)
+
+                with c4s:
+                    # 귀책별 모니터링 점수 비교 (전월/당월)
+                    prev_moni_cols = [c for c in low_df.columns if "12월모니" in c or "전월모니" in c]
+                    curr_moni_cols = [c for c in low_df.columns if "01월모니" in c or "당월모니" in c]
+
+                    if prev_moni_cols and curr_moni_cols and not data_rows_low.empty:
+                        귀책_list = data_rows_low[귀책_c].tolist()
+
+                        # 전체 컬럼 합산
+                        prev_moni_vals = data_rows_low[prev_moni_cols].apply(
+                            lambda r: to_num(r).mean(), axis=1).round(1).tolist()
+                        curr_moni_vals = data_rows_low[curr_moni_cols].apply(
+                            lambda r: to_num(r).mean(), axis=1).round(1).tolist()
+
+                        fig11 = go.Figure()
+                        fig11.add_trace(go.Bar(
+                            name=prev_ym, x=귀책_list, y=prev_moni_vals,
+                            marker_color="#42a5f5", text=prev_moni_vals, textposition="outside",
+                        ))
+                        fig11.add_trace(go.Bar(
+                            name=report_ym, x=귀책_list, y=curr_moni_vals,
+                            marker_color="#1a237e", text=curr_moni_vals, textposition="outside",
+                        ))
+                        fig11.add_hline(y=csat_monitor, line_dash="dot", line_color="#ef5350",
+                                        annotation_text=f"모니터링 기준 {csat_monitor}점")
+                        fig11.update_layout(
+                            **CHART_BASE,
+                            title="귀책별 모니터링 점수 비교",
+                            barmode="group", height=350,
+                            yaxis=dict(range=[70,105]),
+                            legend=dict(orientation="h", y=1.08),
+                        )
+                        st.plotly_chart(fig11, use_container_width=True)
+
+    st.markdown("---")
+    st.text_area("💬 Comment", key="csat_cmt",
+                 placeholder="CSAT 특이사항을 입력하세요.")
+    st.text_area("📋 02월 목표 및 계획", key="csat_plan",
+                 placeholder="관리 계획을 입력하세요.")
 
 # ─────────────────────────────────────────
-# 10. FOOTER
+# FOOTER
 # ─────────────────────────────────────────
 st.markdown("---")
-st.caption(f"⭐ CSAT 품질 대시보드 · {report_month} 기준 · 모니터링 기준 {score_threshold:.0f}점 미만 · Powered by Streamlit & Plotly")
+st.caption(f"📊 교육품질 통합 대시보드 · {report_ym} 기준 · Powered by Streamlit & Plotly")
